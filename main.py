@@ -8,6 +8,26 @@ from db.models import AuctionsLB, Bazaar, Firesale, ItemSale, Election
 
 app = FastAPI(title="SkyBlock Analytics")
 
+# --- Root helper endpoint ---
+@app.get("/", include_in_schema=False)
+def root() -> Dict[str, Any]:
+    """
+    Basic API information and available routes.
+    """
+    return {
+        "message": "Welcome to the SkyBlock Analytics API.",
+        "usage": {
+            "/items": "List all tracked item IDs (Bazaar & BIN)",
+            "/prices/{item_id}?range=...": "Time series price (BIN or Bazaar) with optional range: all,6months,2months,1week,1day,1hour (default 1week)",
+            "/firesales?range=...": "List firesale events with optional range",
+            "/item_sales?range=...": "List raw item sales records with optional range",
+            "/elections?range=...": "List mayoral elections with optional range",
+            "/docs": "Interactive Swagger UI",
+            "/redoc": "ReDoc documentation",
+            "/openapi.json": "OpenAPI schema JSON"
+        }
+    }
+
 # --- DB Dependency ---
 def get_db():
     db = SessionLocal()
@@ -69,8 +89,14 @@ def get_prices(
         return [{"timestamp": ts.isoformat(), "price": price} for ts, price in rows2]
     raise HTTPException(status_code=404, detail=f"No price data for item {item_id}")
 
-# --- Generic list endpoint with optional range ---
-def generic_list(model_timestamp, fields: List[Any]):
+# --- Generic list endpoint factory ---
+def generic_list(
+    timestamp_field,
+    fields: List[Any],
+    path: str,
+    summary: str
+):
+    @app.get(path, summary=summary)
     def endpoint(
         range: str = Query('1week', description="Time window: all,6months,2months,1week,1day,1hour"),
         db: Session = Depends(get_db)
@@ -79,32 +105,40 @@ def generic_list(model_timestamp, fields: List[Any]):
         td = parse_range(range)
         start = None if range == 'all' or td is None else now - td
         q = db.query(*fields)
-        q = apply_time_filters(q, model_timestamp, start, now)
-        rows = q.order_by(model_timestamp).all()
-        return [dict(zip([f.key if hasattr(f, 'key') else f.name for f in fields], r)) for r in rows]
+        q = apply_time_filters(q, timestamp_field, start, now)
+        rows = q.order_by(timestamp_field).all()
+        return [dict(zip(
+            [f.key if hasattr(f, 'key') else f.name for f in fields], r
+        )) for r in rows]
     return endpoint
 
 # Firesales
-app.get("/firesales", summary="List firesale events")(generic_list(
+generic_list(
     Firesale.timestamp,
-    [Firesale.item_id, Firesale.timestamp]
-))
+    [Firesale.item_id, Firesale.timestamp],
+    path="/firesales",
+    summary="List firesale events"
+)
 
 # Item sales
-app.get("/item_sales", summary="Raw item sales records")(generic_list(
+generic_list(
     ItemSale.timestamp,
-    [ItemSale.item_id, ItemSale.count, ItemSale.timestamp]
-))
+    [ItemSale.item_id, ItemSale.count, ItemSale.timestamp],
+    path="/item_sales",
+    summary="Raw item sales records"
+)
 
 # Elections
-app.get("/elections", summary="List mayoral elections")(generic_list(
+generic_list(
     Election.timestamp,
-    [Election.year, Election.mayor, Election.timestamp]
-))
+    [Election.year, Election.mayor, Election.timestamp],
+    path="/elections",
+    summary="List mayoral elections"
+)
 
 # Items list remains unchanged
 @app.get("/items", summary="Aggregate tracked item IDs")
 def list_items(db: Session = Depends(get_db)) -> List[str]:
-    baz = db.query(Bazaar.product_id).distinct().all()
-    lb  = db.query(AuctionsLB.product_id).distinct().all()
-    return sorted({i[0] for i in baz + lb})
+    baz_ids = db.query(Bazaar.product_id).distinct().all()
+    lb_ids  = db.query(AuctionsLB.product_id).distinct().all()
+    return sorted({i[0] for i in baz_ids + lb_ids})
