@@ -81,7 +81,7 @@ def get_prices(
     # Fallback to Bazaar
     q2 = db.query(
         Bazaar.timestamp,
-        Bazaar.data['sell_price'].as_float().label('price')
+        Bazaar.data.label('data')
     ).filter(Bazaar.product_id == item_id)
     q2 = apply_time_filters(q2, Bazaar.timestamp, start, now)
     rows2 = q2.order_by(Bazaar.timestamp).all()
