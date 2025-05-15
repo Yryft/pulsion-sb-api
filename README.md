@@ -5,6 +5,10 @@ This API provides time-series and summary endpoints for various SkyBlock market 
 
 ## Available Endpoints
 
+```
+https://https://pulsion-apiv1.up.railway.app
+```
+
 | Method | Path                | Description                                                                                  |
 | ------ | ------------------- | -------------------------------------------------------------------------------------------- |
 | GET    | `/items`            | List all tracked item IDs in Bazaar & AuctionsLB (lowest BIN).                               |
