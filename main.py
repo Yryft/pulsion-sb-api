@@ -8,26 +8,6 @@ from db.models import AuctionsLB, Bazaar, Firesale, ItemSale, Election
 
 app = FastAPI(title="SkyBlock Analytics")
 
-# --- Root helper endpoint ---
-@app.get("/", include_in_schema=False)
-def root() -> Dict[str, Any]:
-    """
-    Basic API information and available routes.
-    """
-    return {
-        "message": "Welcome to the SkyBlock Analytics API.",
-        "usage": {
-            "/items": "List all tracked item IDs (Bazaar & BIN)",
-            "/prices/{item_id}?range=...": "Time series price (BIN or Bazaar) with optional range: all,6months,2months,1week,1day,1hour (default 1week)",
-            "/firesales?range=...": "List firesale events with optional range",
-            "/item_sales?range=...": "List raw item sales records with optional range",
-            "/elections?range=...": "List mayoral elections with optional range",
-            "/docs": "Interactive Swagger UI",
-            "/redoc": "ReDoc documentation",
-            "/openapi.json": "OpenAPI schema JSON"
-        }
-    }
-
 # --- DB Dependency ---
 def get_db():
     db = SessionLocal()
@@ -89,6 +69,7 @@ def get_prices(
         return [{"timestamp": ts.isoformat(), "price": price} for ts, price in rows2]
     raise HTTPException(status_code=404, detail=f"No price data for item {item_id}")
 
+# --- Sold volume endpoint --- (Bazaar only for now)
 @app.get("/sold/{item_id}", summary="Amount sold in the given time range")
 def get_bazaar_sold(
     item_id: str,
@@ -101,8 +82,9 @@ def get_bazaar_sold(
 
     q = db.query(
         Bazaar.timestamp,
-        Bazaar.data['buyMovingWeek'].as_float().label('volume')
+        Bazaar.data['sellMovingWeek'].as_float().label('volume')
     ).filter(Bazaar.product_id == item_id)
+    
     q = apply_time_filters(q, Bazaar.timestamp, start, now)
     rows = q.order_by(Bazaar.timestamp).all()
 
