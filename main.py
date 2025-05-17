@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 
 from db.session import SessionLocal
-from db.models import AuctionsLB, Bazaar, Firesale, ItemSale, Election
+from db.models import Bazaar, Firesale, Election
 
 app = FastAPI(title="SkyBlock Analytics")
 
@@ -50,14 +50,6 @@ def get_prices(
     td = parse_range(range)
     start = None if range == 'all' or td is None else now - td
     # First try AuctionsLB
-    q1 = db.query(
-        AuctionsLB.timestamp,
-        AuctionsLB.data['starting_bid'].as_float().label('price')
-    ).filter(AuctionsLB.product_id == item_id)
-    q1 = apply_time_filters(q1, AuctionsLB.timestamp, start, now)
-    rows = q1.order_by(AuctionsLB.timestamp).all()
-    if rows:
-        return [{"timestamp": ts.isoformat(), "price": price} for ts, price in rows]
     # Fallback to Bazaar
     q2 = db.query(
         Bazaar.timestamp,
@@ -132,14 +124,6 @@ generic_list(
     summary="List firesale events"
 )
 
-# Item sales
-generic_list(
-    ItemSale.timestamp,
-    [ItemSale.item_id, ItemSale.count, ItemSale.timestamp],
-    path="/item_sales",
-    summary="Raw item sales records"
-)
-
 # Elections
 generic_list(
     Election.timestamp,
@@ -152,5 +136,4 @@ generic_list(
 @app.get("/items", summary="Aggregate tracked item IDs")
 def list_items(db: Session = Depends(get_db)) -> List[str]:
     baz_ids = db.query(Bazaar.product_id).distinct().all()
-    lb_ids  = db.query(AuctionsLB.product_id).distinct().all()
-    return sorted({i[0] for i in baz_ids + lb_ids})
+    return sorted({i[0] for i in baz_ids})
