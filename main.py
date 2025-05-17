@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 
 from db.session import SessionLocal
-from db.models import Bazaar, Firesale, Election
+from db.models import Bazaar, Election
 
 app = FastAPI(title="SkyBlock Analytics")
 
@@ -115,14 +115,6 @@ def generic_list(
             [f.key if hasattr(f, 'key') else f.name for f in fields], r
         )) for r in rows]
     return endpoint
-
-# Firesales
-generic_list(
-    Firesale.timestamp,
-    [Firesale.item_id, Firesale.timestamp],
-    path="/firesales",
-    summary="List firesale events"
-)
 
 # Elections
 generic_list(
