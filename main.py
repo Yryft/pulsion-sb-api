@@ -77,34 +77,27 @@ def get_prices(
     raise HTTPException(status_code=404, detail=f"No price data for item {item_id}")
 
 # --- Sold volume endpoint --- (Bazaar only for now)
-@app.get("/sold/{item_id}", summary="Amount sold in the given time range")
+@app.get("/sold/{item_id}", summary="Amount sold in the past week")
 def get_bazaar_sold(
     item_id: str,
-    range: str = Query('1week', description="Time window: all,6months,2months,1week,1day,1hour"),
     db: Session = Depends(get_db)
 ):
-    now = datetime.now(timezone.utc)
-    td = parse_range(range)
-    start = None if range == 'all' or td is None else now - td
 
     q = db.query(
         Bazaar.timestamp,
         Bazaar.data['sellMovingWeek'].as_float().label('volume')
     ).filter(Bazaar.product_id == item_id)
     
-    q = apply_time_filters(q, Bazaar.timestamp, start, now)
+    q = apply_time_filters(q, Bazaar.timestamp)
     rows = q.order_by(Bazaar.timestamp).all()
 
     if not rows or len(rows) < 2:
         raise HTTPException(status_code=404, detail=f"Not enough data to compute sold volume for item {item_id}")
 
-    sold_amount = rows[-1].volume - rows[0].volume
+    sold_amount = rows[0].volume
     return {
         "item_id": item_id,
-        "range": range,
         "sold": sold_amount,
-        "from": rows[0].timestamp.isoformat(),
-        "to": rows[-1].timestamp.isoformat()
     }
 
 
