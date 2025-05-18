@@ -82,17 +82,15 @@ def get_bazaar_sold(
     item_id: str,
     db: Session = Depends(get_db)
 ):
-    now = datetime.now(timezone.utc)
 
     q = db.query(
         Bazaar.timestamp,
         Bazaar.data['sellMovingWeek'].as_float().label('volume')
     ).filter(Bazaar.product_id == item_id)
     
-    q = apply_time_filters(q, Bazaar.timestamp, now)
     rows = q.order_by(Bazaar.timestamp).all()
 
-    if not rows or len(rows) < 2:
+    if not rows or len(rows) < 1:
         raise HTTPException(status_code=404, detail=f"Not enough data to compute sold volume for item {item_id}")
 
     sold_amount = rows[0].volume
