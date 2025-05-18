@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
@@ -7,6 +9,19 @@ from db.session import SessionLocal
 from db.models import Bazaar, Election
 
 app = FastAPI(title="SkyBlock Analytics")
+
+# ─── Enable CORS ──────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",                    # your Next.js dev URL
+        "https://https://bazaar-data.up.railway.app"   # your deployed frontend
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["*"],
+)
+# ────────────────────────────────────────────────────────────────────────────────
 
 # --- DB Dependency ---
 def get_db():
