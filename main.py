@@ -15,7 +15,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",                    # your Next.js dev URL
-        "https://https://bazaar-data.up.railway.app"   # your deployed frontend
+        "https://bazaar-data.up.railway.app"   # your deployed frontend
     ],
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],
