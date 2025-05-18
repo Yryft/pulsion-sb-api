@@ -38,7 +38,7 @@ def parse_range(range_str: str) -> Optional[timedelta]:
         '2months': timedelta(days=60),
         '1week':   timedelta(weeks=1),
         '1day':    timedelta(days=1),
-        '1hour':   timedelta(hours=1)
+        '2hours':   timedelta(hours=2)
     }
     return mapping.get(range_str)
 
@@ -82,13 +82,14 @@ def get_bazaar_sold(
     item_id: str,
     db: Session = Depends(get_db)
 ):
+    now = datetime.now(timezone.utc)
 
     q = db.query(
         Bazaar.timestamp,
         Bazaar.data['sellMovingWeek'].as_float().label('volume')
     ).filter(Bazaar.product_id == item_id)
     
-    q = apply_time_filters(q, Bazaar.timestamp)
+    q = apply_time_filters(q, Bazaar.timestamp, now)
     rows = q.order_by(Bazaar.timestamp).all()
 
     if not rows or len(rows) < 2:
