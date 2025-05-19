@@ -95,7 +95,7 @@ def get_top(db: Session = Depends(get_db)):
             Bazaar.product_id,
             Bazaar.data['sellPrice'].as_float().label('sellPrice'),
             Bazaar.data['buyPrice'].as_float().label('buyPrice'),
-            Bazaar.data['sellMovingWeek'].as_float().label('sellMovingWeek')
+            Bazaar.data['buyMovingWeek'].as_float().label('buyMovingWeek')
         )
         .order_by(Bazaar.product_id, Bazaar.timestamp.desc())
         .distinct(Bazaar.product_id)
@@ -117,7 +117,7 @@ def get_top(db: Session = Depends(get_db)):
             "item_id": pid,
             "sell_price": sell,
             "buy_price": buy,
-            "sell_moving_week": vol,
+            "buy_moving_week": vol,
             "revenue_estimate": rev
         }
         for pid, sell, buy, vol, rev in top10
