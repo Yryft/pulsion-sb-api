@@ -14,9 +14,10 @@ app = FastAPI(title="SkyBlock Analytics")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",                    # your Next.js dev URL
+        "http://localhost:3000",
         "http://192.168.0.160:3000",
-        "https://bazaar-data.up.railway.app"   # your deployed frontend
+        "https://bazaar-data.up.railway.app",
+        "https://pulsion-apiv1.up.railway.app"
     ],
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],
@@ -52,8 +53,8 @@ def apply_time_filters(query, timestamp_field, start: Optional[datetime], end: O
         query = query.filter(timestamp_field <= end)
     return query
 
-# --- Time series bazaar price endpoint ---
-@app.get("/prices/{item_id}", summary="Time series bazaar sell prices")
+# --- Time series bazaar data endpoint ---
+@app.get("/prices/{item_id}", summary="Time series bazaar data")
 def get_prices(
     item_id: str,
     range: str = Query(
@@ -63,7 +64,7 @@ def get_prices(
     db: Session = Depends(get_db)
 ) -> List[Dict[str, Any]]:
     """
-    Returns time series of Bazaar sell prices for a given item.
+    Returns time series of full Bazaar data for a given item.
     """
     now = datetime.now(timezone.utc)
     td = parse_range(range)
@@ -71,29 +72,31 @@ def get_prices(
 
     q = db.query(
         Bazaar.timestamp,
-        Bazaar.data['sellPrice'].as_float().label('price')
+        Bazaar.data.label('data')
     ).filter(Bazaar.product_id == item_id)
     q = apply_time_filters(q, Bazaar.timestamp, start, now)
     rows = q.order_by(Bazaar.timestamp).all()
 
     if not rows:
-        raise HTTPException(status_code=404, detail=f"No bazaar price data for item {item_id}")
+        raise HTTPException(status_code=404, detail=f"No bazaar data for item {item_id}")
 
-    return [{"timestamp": ts.isoformat(), "price": price} for ts, price in rows]
+    return [
+        {"timestamp": ts.isoformat(), "data": data}
+        for ts, data in rows
+    ]
 
-# --- Latest sold volume endpoint --- (Bazaar only)
-@app.get("/sold/{item_id}", summary="Latest amount sold in a week")
+# --- Latest sold data endpoint --- (Bazaar only)
+@app.get("/sold/{item_id}", summary="Latest Bazaar data entry")
 def get_bazaar_sold(
     item_id: str,
     db: Session = Depends(get_db)
 ):
     """
-    Returns the most recent moving sold volume (sellMovingWeek) for the given item.
+    Returns the most recent full Bazaar data entry for the given item.
     """
     latest = (
         db.query(
-            Bazaar.timestamp,
-            Bazaar.data['sellMovingWeek'].as_float().label('volume')
+            Bazaar.data.label('data')
         )
         .filter(Bazaar.product_id == item_id)
         .order_by(Bazaar.timestamp.desc())
@@ -101,14 +104,9 @@ def get_bazaar_sold(
     )
 
     if not latest:
-        raise HTTPException(status_code=404, detail=f"No bazaar sold data for item {item_id}")
+        raise HTTPException(status_code=404, detail=f"No bazaar data for item {item_id}")
 
-    ts, vol = latest
-    return {
-        "item_id": item_id,
-        "timestamp": ts.isoformat(),
-        "sold_moving_week": vol,
-    }
+    return latest.data
 
 # --- Elections endpoint ---
 @app.get("/elections", summary="List mayoral elections")
