@@ -7,7 +7,10 @@ from db.session import SessionLocal
 from db.models import Bazaar, Election
 
 # Adjust this factor to scale volume impact in your profitability formula
-SCALING_FACTOR = 1  # e.g., 1 (pure revenue), or larger to normalize large volumes
+# tweak these as you like
+CAPITAL = 1_000_000_000       # 1 billion coins bankroll
+MARKET_SHARE = 0.10          # assume you can capture 10% of weekly volume
+SCALING_FACTOR = 1           # keep revenue in raw coins
 
 app = FastAPI(title="SkyBlock Analytics")
 
@@ -88,41 +91,53 @@ def get_bazaar_sold(item_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/top", summary="Top 10 profitable items")
-def get_top(db: Session = Depends(get_db)):
-    # fetch all distinct items' latest data
+def get_top(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    # 1) grab latest snapshot per item
     subq = (
         db.query(
-            Bazaar.product_id,
-            Bazaar.data['sellPrice'].as_float().label('sellPrice'),
-            Bazaar.data['buyPrice'].as_float().label('buyPrice'),
-            Bazaar.data['buyMovingWeek'].as_float().label('buyMovingWeek')
+            Bazaar.product_id.label("item_id"),
+            Bazaar.data['sellPrice'].as_float().label("sellPrice"),
+            Bazaar.data['buyPrice'].as_float().label("buyPrice"),
+            Bazaar.data['sellVolume'].as_float().label("sellVolume"),
+            Bazaar.data['buyVolume'].as_float().label("buyVolume"),
+            Bazaar.data['buyMovingWeek'].as_float().label("buyMovingWeek")
         )
         .order_by(Bazaar.product_id, Bazaar.timestamp.desc())
         .distinct(Bazaar.product_id)
         .subquery()
     )
-    items = db.query(subq).all()
+    rows = db.query(subq).all()
 
-    # compute revenue estimate
     scored = []
-    for pid, sell, buy, vol in items:
-        if sell > 1 and buy > 1:
-            if sell and buy is not None and vol and vol > 0:
-                rev = (sell - buy) * vol / SCALING_FACTOR
-                scored.append((pid, sell, buy, vol, rev))
-    # sort and take top 10
-    top10 = sorted(scored, key=lambda x: x[4], reverse=True)[:10]
+    for item_id, sell_p, buy_p, sell_v, buy_v, vol_w in rows:
+        # a) must have nonzero, sane prices & traded volume
+        if sell_p and buy_p and vol_w and sell_p > 0 and buy_p > 0:
+            # b) compute per-unit spread
+            spread = buy_p - sell_p
+            if spread <= 0:
+                continue
 
-    return [
-        {
-            "item_id": pid,
-            "sell_price": sell,
-            "buy_price": buy,
-            "buy_moving_week": vol,
-            "revenue_estimate": rev
-        }
-        for pid, sell, buy, vol, rev in top10
-    ]
+            # c) realistic volume caps
+            cap_by_money = int(CAPITAL // buy_p)
+            cap_by_market = int(MARKET_SHARE * vol_w)
+            units_max = min(cap_by_money, cap_by_market)
+            if units_max < 1:
+                continue
+
+            # d) profit & ROI
+            profit = (spread * units_max) / SCALING_FACTOR
+            roi    = profit / CAPITAL
+
+            scored.append({
+                "item_id": item_id,
+                "sell_price": sell_p,
+                "buy_price": buy_p,
+                "weekly_volume": vol_w,
+                "spread": spread,
+                "max_units": units_max,
+                "profit_estimate": profit,
+                "roi": roi
+            })
 
 
 @app.get("/elections", summary="List mayoral elections")
