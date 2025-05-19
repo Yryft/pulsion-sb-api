@@ -106,9 +106,10 @@ def get_top(db: Session = Depends(get_db)):
     # compute revenue estimate
     scored = []
     for pid, sell, buy, vol in items:
-        if sell and buy is not None and vol and vol > 0:
-            rev = (sell - buy) * vol / SCALING_FACTOR
-            scored.append((pid, sell, buy, vol, rev))
+        if sell > 1 and buy > 1:
+            if sell and buy is not None and vol and vol > 0:
+                rev = (sell - buy) * vol / SCALING_FACTOR
+                scored.append((pid, sell, buy, vol, rev))
     # sort and take top 10
     top10 = sorted(scored, key=lambda x: x[4], reverse=True)[:10]
 
