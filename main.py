@@ -15,7 +15,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",                    # your Next.js dev URL
-        "http://192.168.0.160:3000",                       
+        "http://192.168.0.160:3000",
         "https://bazaar-data.up.railway.app"   # your deployed frontend
     ],
     allow_credentials=True,
@@ -39,7 +39,8 @@ def parse_range(range_str: str) -> Optional[timedelta]:
         '2months': timedelta(days=60),
         '1week':   timedelta(weeks=1),
         '1day':    timedelta(days=1),
-        '2hours':   timedelta(hours=2)
+        'latest':  timedelta(hours=2),
+        'all':     None
     }
     return mapping.get(range_str)
 
@@ -51,88 +52,94 @@ def apply_time_filters(query, timestamp_field, start: Optional[datetime], end: O
         query = query.filter(timestamp_field <= end)
     return query
 
-# --- Combined prices endpoint ---
-@app.get("/prices/{item_id}", summary="Time series price for BIN or Bazaar")
+# --- Time series bazaar price endpoint ---
+@app.get("/prices/{item_id}", summary="Time series bazaar sell prices")
 def get_prices(
     item_id: str,
-    range: str = Query('1week', description="Time window: all,6months,2months,1week,1day,1hour"),
+    range: str = Query(
+        '1week',
+        description="Time window: all,6months,2months,1week,1day,latest"
+    ),
     db: Session = Depends(get_db)
 ) -> List[Dict[str, Any]]:
     """
-    Returns time series of prices: BIN (auctions) or Bazaar (sell_price).
-    Chooses AuctionsLB if any BIN data exists, otherwise Bazaar.
+    Returns time series of Bazaar sell prices for a given item.
     """
     now = datetime.now(timezone.utc)
     td = parse_range(range)
     start = None if range == 'all' or td is None else now - td
-    # First try AuctionsLB
-    # Fallback to Bazaar
-    q2 = db.query(
-        Bazaar.timestamp,
-        Bazaar.data.label('data')
-    ).filter(Bazaar.product_id == item_id)
-    q2 = apply_time_filters(q2, Bazaar.timestamp, start, now)
-    rows2 = q2.order_by(Bazaar.timestamp).all()
-    if rows2:
-        return [{"timestamp": ts.isoformat(), "price": price} for ts, price in rows2]
-    raise HTTPException(status_code=404, detail=f"No price data for item {item_id}")
 
-# --- Sold volume endpoint --- (Bazaar only for now)
-@app.get("/sold/{item_id}", summary="Amount sold in the past week")
+    q = db.query(
+        Bazaar.timestamp,
+        Bazaar.data['sellPrice'].as_float().label('price')
+    ).filter(Bazaar.product_id == item_id)
+    q = apply_time_filters(q, Bazaar.timestamp, start, now)
+    rows = q.order_by(Bazaar.timestamp).all()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No bazaar price data for item {item_id}")
+
+    return [{"timestamp": ts.isoformat(), "price": price} for ts, price in rows]
+
+# --- Latest sold volume endpoint --- (Bazaar only)
+@app.get("/sold/{item_id}", summary="Latest amount sold in a week")
 def get_bazaar_sold(
     item_id: str,
     db: Session = Depends(get_db)
 ):
+    """
+    Returns the most recent moving sold volume (sellMovingWeek) for the given item.
+    """
+    latest = (
+        db.query(
+            Bazaar.timestamp,
+            Bazaar.data['sellMovingWeek'].as_float().label('volume')
+        )
+        .filter(Bazaar.product_id == item_id)
+        .order_by(Bazaar.timestamp.desc())
+        .first()
+    )
 
-    q = db.query(
-        Bazaar.timestamp,
-        Bazaar.data['sellMovingWeek'].as_float().label('volume')
-    ).filter(Bazaar.product_id == item_id)
-    
-    rows = q.order_by(Bazaar.timestamp).all()
+    if not latest:
+        raise HTTPException(status_code=404, detail=f"No bazaar sold data for item {item_id}")
 
-    if not rows or len(rows) < 1:
-        raise HTTPException(status_code=404, detail=f"Not enough data to compute sold volume for item {item_id}")
-
-    sold_amount = rows[0].volume
+    ts, vol = latest
     return {
         "item_id": item_id,
-        "sold": sold_amount,
+        "timestamp": ts.isoformat(),
+        "sold_moving_week": vol,
     }
 
+# --- Elections endpoint ---
+@app.get("/elections", summary="List mayoral elections")
+def get_elections(
+    range: str = Query(
+        '1week',
+        description="Time window: all,6months,2months,1week,1day,latest"
+    ),
+    db: Session = Depends(get_db)
+) -> List[Dict[str, Any]]:
+    """
+    Returns list of elections with year, mayor, and timestamp within the specified time window.
+    """
+    now = datetime.now(timezone.utc)
+    td = parse_range(range)
+    start = None if range == 'all' or td is None else now - td
 
-# --- Generic list endpoint factory ---
-def generic_list(
-    timestamp_field,
-    fields: List[Any],
-    path: str,
-    summary: str
-):
-    @app.get(path, summary=summary)
-    def endpoint(
-        range: str = Query('1week', description="Time window: all,6months,2months,1week,1day,1hour"),
-        db: Session = Depends(get_db)
-    ):
-        now = datetime.now(timezone.utc)
-        td = parse_range(range)
-        start = None if range == 'all' or td is None else now - td
-        q = db.query(*fields)
-        q = apply_time_filters(q, timestamp_field, start, now)
-        rows = q.order_by(timestamp_field).all()
-        return [dict(zip(
-            [f.key if hasattr(f, 'key') else f.name for f in fields], r
-        )) for r in rows]
-    return endpoint
+    q = db.query(
+        Election.year,
+        Election.mayor,
+        Election.timestamp
+    )
+    q = apply_time_filters(q, Election.timestamp, start, now)
+    rows = q.order_by(Election.timestamp).all()
 
-# Elections
-generic_list(
-    Election.timestamp,
-    [Election.year, Election.mayor, Election.timestamp],
-    path="/elections",
-    summary="List mayoral elections"
-)
+    return [
+        {"year": year, "mayor": mayor, "timestamp": ts.isoformat()}
+        for year, mayor, ts in rows
+    ]
 
-# Items list remains unchanged
+# --- Items list endpoint ---
 @app.get("/items", summary="Aggregate tracked item IDs")
 def list_items(db: Session = Depends(get_db)) -> List[str]:
     baz_ids = db.query(Bazaar.product_id).distinct().all()

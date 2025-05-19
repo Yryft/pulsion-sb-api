@@ -13,7 +13,7 @@ https://https://pulsion-apiv1.up.railway.app
 | ------ | ------------------- | -------------------------------------------------------------------------------------------- |
 | GET    | `/items`            | List all tracked item IDs.                               |
 | GET    | `/prices/{item_id}` | Time series of price data. Add `?range=` to select window (default `1week`). |
-| GET    | `/sold/{item_id}`   | Amount sold derived from `buyMovingWeek` across given range (use `?range=`).    |
+| GET    | `/sold/{item_id}`   | Amount sold derived from `buyMovingWeek` across the last week.    |
 | GET    | `/elections`        | List mayoral elections with year, mayor name, and timestamp.                                 |
 | GET    | `/docs`             | Interactive Swagger UI (auto-generated OpenAPI docs).                                        |
 | GET    | `/redoc`            | Alternative ReDoc documentation view.                                                        |

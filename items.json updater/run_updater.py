@@ -72,7 +72,6 @@ def jsons():
     shutil.rmtree('NotEnoughUpdates-REPO-master')
     print('Succès : NotEnoughUpdates-REPO-master supprimé.')
     
-
-get_neu_data()
-jsons()
-input("\n\nAppuie sur Entrée pour quitter...")
+if __name__ == "__main__":
+    get_neu_data()
+    jsons()
