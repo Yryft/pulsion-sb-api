@@ -101,8 +101,14 @@ class ItemProfit(BaseModel):
     profit_estimate: float
     roi: float
 
-@app.get("/top", response_model=List[ItemProfit], summary="Top 10 profitable items")
-def get_top(db: Session = Depends(get_db)) -> List[ItemProfit]:
+from fastapi import Query
+
+
+@app.get("/top", response_model=List[ItemProfit], summary="Top N profitable items")
+def get_top(
+    limit: int = Query(10, ge=10, le=200, description="Number of top items to return (10–200)"),
+    db: Session = Depends(get_db)
+) -> List[ItemProfit]:
     # 1) Latest snapshot per item
     subq = (
         db.query(
@@ -120,23 +126,19 @@ def get_top(db: Session = Depends(get_db)) -> List[ItemProfit]:
 
     scored: List[Dict[str, Any]] = []
     for item_id, sell_p, buy_p, vol_w in rows:
-        # a) must have nonzero, sane prices & volume
         if not (sell_p and buy_p and vol_w and sell_p > 0 and buy_p > 0):
             continue
 
-        # b) compute per-unit spread
         spread = buy_p - sell_p
         if spread <= 0:
             continue
 
-        # c) realistic caps
         cap_by_money  = int(CAPITAL // buy_p)
         cap_by_market = int(MARKET_SHARE * vol_w)
         units_max = min(cap_by_money, cap_by_market)
         if units_max < 1:
             continue
 
-        # d) profit & ROI
         profit = (spread * units_max) / SCALING_FACTOR
         roi    = profit / CAPITAL
 
@@ -151,9 +153,9 @@ def get_top(db: Session = Depends(get_db)) -> List[ItemProfit]:
             "roi":             roi
         })
 
-    # sort descending by profit, take top 10
     scored.sort(key=lambda x: x["profit_estimate"], reverse=True)
-    return scored[:10]
+    return scored[:limit]
+
 
 
 @app.get("/elections", summary="List mayoral elections")
