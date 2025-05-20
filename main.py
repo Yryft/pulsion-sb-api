@@ -101,8 +101,28 @@ class ItemProfit(BaseModel):
     profit_estimate: float
     roi: float
 
-@app.get("/top", response_model=List[ItemProfit], summary="Top 10 profitable items")
-def get_top(db: Session = Depends(get_db)) -> List[ItemProfit]:
+from typing import List, Dict, Any
+from fastapi import FastAPI, Depends, Query
+from sqlalchemy.orm import Session
+
+app = FastAPI()
+
+@app.get(
+    "/top",
+    response_model=List[ItemProfit],
+    summary="Top N profitable items",
+    description="Fetch the top N items sorted by profit estimate. Default is 10.",
+)
+def get_top(
+    top: int = Query(
+        10,
+        title="Number of items",
+        description="How many top items to return (10–100)",
+        ge=10,
+        le=100,
+    ),
+    db: Session = Depends(get_db),
+) -> List[ItemProfit]:
     # 1) Latest snapshot per item
     subq = (
         db.query(
@@ -132,7 +152,7 @@ def get_top(db: Session = Depends(get_db)) -> List[ItemProfit]:
         # c) realistic caps
         cap_by_money  = int(CAPITAL // buy_p)
         cap_by_market = int(MARKET_SHARE * vol_w)
-        units_max = min(cap_by_money, cap_by_market)
+        units_max     = min(cap_by_money, cap_by_market)
         if units_max < 1:
             continue
 
@@ -151,9 +171,11 @@ def get_top(db: Session = Depends(get_db)) -> List[ItemProfit]:
             "roi":             roi
         })
 
-    # sort descending by profit, take top 10
+    # sort descending by profit
     scored.sort(key=lambda x: x["profit_estimate"], reverse=True)
-    return scored[:10]
+
+    # return only the top N
+    return scored[:top]
 
 
 @app.get("/elections", summary="List mayoral elections")
