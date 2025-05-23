@@ -9,7 +9,7 @@ from db.models import Bazaar, Election
 
 # Adjust this factor to scale volume impact in your profitability formula
 # tweak these as you like
-CAPITAL = 1_000_000_000       # 1 billion coins bankroll
+CAPITAL = 1_000_000_000_000       # 1 billion coins bankroll
 MARKET_SHARE = 0.10          # assume you can capture 10% of weekly volume
 SCALING_FACTOR = 1           # keep revenue in raw coins
 
